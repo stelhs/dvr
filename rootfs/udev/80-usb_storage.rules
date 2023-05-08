@@ -1,0 +1,7 @@
+ACTION=="add", SUBSYSTEM=="block", ENV{ID_VENDOR}=="WDC_WD62", ENV{ID_MODEL}=="WDC_WD62PURZ-74B3AY0", ENV{ID_SERIAL_SHORT}=="WD-C81Z0S3K", RUN+="/bin/bash -c '/etc/udev/rules.d/mount_storage.sh /storage1'"
+
+ACTION=="add", SUBSYSTEM=="block", ENV{ID_VENDOR}=="WD", ENV{ID_MODEL}=="My_Book_1142", ENV{ID_SERIAL_SHORT}=="5743415A414C343538373138", RUN+="/bin/bash -c '/etc/udev/rules.d/mount_storage.sh /storage2'"
+
+ACTION=="remove", SUBSYSTEM=="block", ENV{ID_VENDOR}=="WDC_WD62", ENV{ID_MODEL}=="WDC_WD62PURZ-74B3AY0", ENV{ID_SERIAL_SHORT}=="WD-C81Z0S3K", RUN+="/bin/bash -c '/etc/udev/rules.d/umount_storage.sh'"
+ACTION=="remove", SUBSYSTEM=="block", ENV{ID_VENDOR}=="WD", ENV{ID_MODEL}=="My_Book_1142", ENV{ID_SERIAL_SHORT}=="5743415A414C343538373138", RUN+="/bin/bash -c '/etc/udev/rules.d/umount_storage.sh'"
+
