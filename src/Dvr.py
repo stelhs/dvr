@@ -1,5 +1,6 @@
-import os, re
+import os, stat
 from Task import *
+from Cron import *
 from Syslog import *
 from Exceptions import *
 from HttpServer import *
@@ -20,25 +21,19 @@ class Dvr():
         s.tc = TelegramClient(s.conf.telegram)
         Task.setErrorCb(s.taskExceptionHandler)
         s.db = DatabaseConnector(s, s.conf.db)
+        s.cron = Cron()
 
         s._camerasList = []
         for camConf in s.conf.cameras:
-            cam = Camera(s, camConf['name'], camConf)
+            cam = Camera(s, camConf['name'], camConf, s.conf.dvr)
             s._camerasList.append(cam)
-
 
         s.httpServer = HttpServer(s.conf.dvr['host'],
                                   s.conf.dvr['port'])
         s.httpHandlers = Dvr.HttpHandlers(s, s.httpServer)
 
-#        s.sn = SkynetNotifier('dvr',
-#                              s.conf.dvr['skynetServer']['host'],
-#                              s.conf.dvr['skynetServer']['port'],
-#                              s.conf.dvr['host'])
-
-#        s.periodicNotifier = PeriodicNotifier()
-#        s.skynetPortsUpdater = s.periodicNotifier.register("ports", s.skynetUpdatePortsHandler, 2000)
-
+        s.cron.register('videoCleaner', '*/10 * * * *', s.cleaner)
+        s.stopperTask = Task.setPeriodic('stopper', 1000, s.stopperCb)
 
 
     def cameras(s):
@@ -63,7 +58,7 @@ class Dvr():
     def start(s):
         for cam in s.cameras():
             try:
-                if not cam.isRecording():
+                if not cam.isStarted() and 'RECORDING' in cam.options():
                     print("Start recording %s" % cam.name())
                     cam.start()
             except OpenRtspAlreadyStarted:
@@ -74,7 +69,7 @@ class Dvr():
     def stop(s):
         for cam in s.cameras():
             try:
-                if cam.isRecording():
+                if cam.isStarted():
                     cam.stop()
             except OpenRtspAlreadyStopped:
                 pass
@@ -94,6 +89,82 @@ class Dvr():
 
         end = row['end']
         return end - start
+
+
+    def size(s):
+        return sum([c.size() for c in s.cameras()])
+
+
+    def cleaner(s):
+        gb = (1024 * 1024 * 1024)
+        mb = (1024 * 1024)
+        size = s.size()
+        sizeGb = int(size / gb)
+        maxSize = s.conf.dvr['storage']['maxSizeGb'] * gb
+
+        s.log.info("video storage size: %.1fGb, max_storage_size: %.1fGb,\n" % (
+                         sizeGb, s.conf.dvr['storage']['maxSizeGb']))
+
+        if size < maxSize:
+            return
+
+        sizeToDelete = size - maxSize
+        sizeToDeleteGb = int(sizeToDelete / gb)
+        s.log.info("video storage size: %.1fGb, need to delete size: %.1fGb,\n" % (
+                         sizeGb, sizeToDeleteGb))
+
+        cnt = 0
+        while sizeToDelete > 0:
+            cnt += 1
+            row = s.db.query('select id, fname, file_size from videos ' \
+                             'where created < (now() - interval 5 minute) ' \
+                             'order by id asc limit 1')
+            if 'id' not in row:
+                s.log.err("Can't select video file")
+                return
+
+            fname = "%s/%s" % (s.conf.dvr['storage']['dir'], row['fname'])
+
+            s.log.info("remove %s, size = %.2fMb, sizeToDelete: %.2f Mb\n" % (
+                        fname, row['file_size'] / mb, sizeToDelete / mb))
+            try:
+                os.unlink(fname)
+            except OSError as e:
+                s.log.err("Can't remove %s: %s" % (fname, e))
+
+            s.rmEmptyDirs(s.conf.dvr['storage']['dir'], True)
+
+            s.db.query('delete from videos where id = %d' % row['id'])
+            sizeToDelete -= row['file_size']
+
+        s.log.info("%d files were removed\n" % cnt)
+
+
+    def rmEmptyDirs(s, dir, preserve=False):
+        ld = os.listdir(dir)
+        if not len(ld) and not preserve:
+            os.rmdir(dir)
+            return
+        for path in (os.path.join(dir, p) for p in ld):
+            st = os.stat(path)
+            if stat.S_ISDIR(st.st_mode):
+                s.rmEmptyDirs(path)
+
+
+    def stopperCb(s, task):
+        for cam in s.cameras():
+            if cam.isStarted():
+                cam.checkForRestart()
+
+
+    def __repr__(s):
+        text = "List cameras:\n"
+        def camInfo(c):
+            nonlocal text
+            text += "\t%s:%s:%s\n" % (c.name(), 'started' if c.isStarted() else 'stopped',
+                                      'recording' if c.isRecording() else 'not_recording')
+        list(map(camInfo, s.cameras()))
+        return text
 
 
     def destroy(s):
@@ -119,84 +190,8 @@ class Dvr():
             except CameraNotRegistredError as e:
                 s.log.err("openRtspHandler: call unregistred camera: %s" % e)
                 raise HttpHandlerError(str(e))
+            cam.openRtspHandler(args, conn)
 
-            startTime = int(args['start_time'])
-            videoFile = args['video_file']
-            audioFile = args['audio_file'] if 'audio_file' in args else None
-
-            startDate = datetime.datetime.fromtimestamp(startTime)
-
-            try:
-                vsize = os.path.getsize(videoFile)
-            except FileNotFoundError:
-                s.log.err("openRtspHandler: camera %s: file %s not exist" % (
-                          cam.name(), videoFile))
-                cam.restart()
-                raise HttpHandlerError("file %s not exist" % videoFile)
-
-            if vsize == 0:
-                s.log.err("openRtspHandler: camera %s: file %s has null size" % (
-                          cam.name(), videoFile))
-                cam.restart()
-                raise HttpHandlerError("file %s null size" % videoFile)
-
-            ffmpegCmd = 'ffmpeg -i %s ' % videoFile
-            aCopy = ''
-            if audioFile:
-                if cam.audioCodec == 'PCMA':
-                    ffmpegCmd += '-f alaw -ar %d -i "%s" ' % (
-                            cam.audioSampleRate, audioFile)
-                aCopy = '-c:a aac -b:a 256k'
-
-            camDir = "%s/%s" % (startDate.strftime('%Y-%m/%d'), cName)
-            fullDir = "%s%s" % (conf['storage']['dir'], camDir)
-
-            if not os.path.exists(fullDir):
-                os.system("mkdir -p %s" % fullDir)
-
-            fileName = "%s/%s.mp4" % (camDir, startDate.strftime('%H_%M_%S'));
-            fullFileName = '%s/%s' % (conf['storage']['dir'], fileName)
-
-            ffmpegCmd += '-c:v copy %s -strict -2 -f mp4 %s' % (
-                    aCopy, fullFileName)
-
-            #print("ffmpegCmd = %s" % ffmpegCmd)
-
-            try:
-                os.unlink(fullFileName)
-            except FileNotFoundError:
-                pass
-
-            p = subprocess.run(ffmpegCmd, shell=True, capture_output=True, text=True)
-
-            if p.returncode:
-                err = "can't encode video file %s: \n%s\n" % (
-                                       fullFileName, p.stderr)
-                s.log.err("openRtspHandler: %s" % err)
-                raise HttpHandlerError(err)
-
-            r = re.findall('time=(\d{2}):(\d{2}):(\d{2})', p.stderr);
-            if not r or not len(r) or len(r[0]) < 3:
-                if not cam.hideErrors:
-                    s.toAdmin("can't parse encoder output for file %s, " %
-                                        fullFileName)
-                Task.setTimeout("camera_%s_async_restart" % cam.name(), 500, cam.restart)
-                err = "can't parse encoder output for file %s: \n%s\n" % (
-                                       fullFileName, p.stderr)
-                s.log.err("openRtspHandler: %s" % err)
-                raise HttpHandlerError(err)
-
-            hours = int(r[0][0])
-            mins = int(r[0][1])
-            secs = int(r[0][2])
-
-            duration = hours * 3600 + mins * 60 + secs
-            s.dvr.db.insert('videos',
-                            {'cam_name': cName,
-                             'fname': fileName,
-                             'duration': duration,
-                             'file_size': os.path.getsize(fullFileName)},
-                            {'created': 'FROM_UNIXTIME(%s)' % startTime})
 
 
 

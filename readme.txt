@@ -37,3 +37,6 @@ Installing DVR
             event_timeout=1200
         and
             sudo systemctl restart udev.service
+
+6) install packages:
+    apt install python3-psutil
