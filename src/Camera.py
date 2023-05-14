@@ -98,7 +98,6 @@ class Camera():
             Task.sleep(2000)
 
         s.log.info("camera '%s' recording has stopped" % s.name())
-        print("camera '%s' recording has stopped" % s.name())
 
 
     def restart(s):
@@ -115,15 +114,17 @@ class Camera():
 
 
     def stat(s):
-        return {'restartCnt': s._restartCnt,
+        return {'name': s.name(),
+                'desc': s.description(),
+                'restartCnt': s._restartCnt,
                 'openrtspNoFileCnt': s._openrtspNoFileCnt,
                 'openrtspNullSizeCnt': s._openrtspNullSizeCnt,
                 'encoderOutputParseErrCnt': s._encoderOutputParseErrCnt,
                 'dbInsertErrCnt': s._dbInsertErrCnt,
                 'isRecordStarted': s.isStarted(),
                 'isRecording': s.isRecording(),
-                'dataSize': s.size() / (1024 * 1024 * 1024),
-                'duration': timeDurationStr(s.duration())}
+                'dataSize': s.size(),
+                'duration': s.duration()}
 
 
     def resetStat(s):
@@ -147,7 +148,7 @@ class Camera():
         row = s.db.query("select sum(duration) as sum from videos "\
                          "where cam_name = '%s' and file_size is not NULL" %
                           s.name());
-        if 'sum' not in row:
+        if 'sum' not in row or row['sum'] == None:
             return 0
         return int(row['sum'])
 

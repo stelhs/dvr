@@ -157,6 +157,17 @@ class Dvr():
                 cam.checkForRestart()
 
 
+    def stat(s):
+        return {'totalSize': s.size(),
+                'totalDuration': s.archiveDuration(),
+                'cameras': [c.stat() for c in s.cameras()]}
+
+
+    def destroy(s):
+        s.stop()
+        s.httpServer.destroy()
+
+
     def __repr__(s):
         text = "List cameras:\n"
         def camInfo(c):
@@ -167,19 +178,42 @@ class Dvr():
         return text
 
 
-    def destroy(s):
-        s.stop()
-        s.httpServer.destroy()
-
-
     class HttpHandlers():
         def __init__(s, dvr, httpServer):
             s.dvr = dvr
+            s.log = Syslog("Dvr.HttpHandlers")
+            s.toAdmin = dvr.toAdmin
             s.httpServer = httpServer
             s.httpServer.setReqHandler("GET", "/open_rtsp_cb", s.openRtspHandler,
                                        ('cname', 'start_time', 'video_file'), errLog=True)
-            s.log = Syslog("Dvr.HttpHandlers")
-            s.toAdmin = dvr.toAdmin
+            s.httpServer.setReqHandler("GET", "/dvr/start", s.startHandler, ('cname',))
+            s.httpServer.setReqHandler("GET", "/dvr/stop", s.stopHandler, ('cname',))
+            s.httpServer.setReqHandler("GET", "/dvr/stat", s.statHandler)
+
+
+        def startHandler(s, args, conn):
+            cName = args['cname']
+            try:
+                cam = s.dvr.camera('cName')
+                cam.start()
+            except AppError as e:
+                raise HttpHandlerError('Can`t start camera %s: %s' % (cName, e))
+
+
+        def stopHandler(s, args, conn):
+            cName = args['cname']
+            try:
+                cam = s.dvr.camera('cName')
+                cam.stop()
+            except AppError as e:
+                raise HttpHandlerError('Can`t stop camera %s: %s' % (cName, e))
+
+
+        def statHandler(s, args, conn):
+            try:
+                return s.dvr.stat()
+            except AppError as e:
+                raise HttpHandlerError('Can`t gettitng DVR status: %s' % e)
 
 
         def openRtspHandler(s, args, conn):
@@ -191,7 +225,3 @@ class Dvr():
                 s.log.err("openRtspHandler: call unregistred camera: %s" % e)
                 raise HttpHandlerError(str(e))
             cam.openRtspHandler(args, conn)
-
-
-
-
