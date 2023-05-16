@@ -10,6 +10,8 @@ from TelegramClient import *
 from SkynetNotifier import *
 from PeriodicNotifier import *
 from DatabaseConnector import *
+from SubProcess import *
+from VarStorage import *
 from Camera import *
 
 
@@ -22,6 +24,9 @@ class Dvr():
         Task.setErrorCb(s.taskExceptionHandler)
         s.db = DatabaseConnector(s, s.conf.db)
         s.cron = Cron()
+        s.sp = SubProcess()
+
+        s.varStorage = VarStorage(s, 'dvr.json')
 
         s._camerasList = []
         for camConf in s.conf.cameras:
@@ -29,11 +34,14 @@ class Dvr():
             s._camerasList.append(cam)
 
         s.httpServer = HttpServer(s.conf.dvr['host'],
-                                  s.conf.dvr['port'])
+                                  s.conf.dvr['port'],
+                                  s.conf.dvr['wwwDir'])
         s.httpHandlers = Dvr.HttpHandlers(s, s.httpServer)
 
         s.cron.register('videoCleaner', '*/10 * * * *', s.cleaner)
         s.stopperTask = Task.setPeriodic('stopper', 1000, s.stopperCb)
+        s.timelapseTask = Task.setPeriodic('ImageRecorderTmelapse',
+                                           8000, s.timelapseCb)
 
 
     def cameras(s):
@@ -70,9 +78,10 @@ class Dvr():
         for cam in s.cameras():
             try:
                 if cam.isStarted():
+                    print("Stop %s" % cam.name())
                     cam.stop()
-            except OpenRtspAlreadyStopped:
-                pass
+            except AppError as e:
+                print("%s stop error: %s" % (cam.name(), e))
 
 
     def archiveDuration(s):
@@ -140,6 +149,11 @@ class Dvr():
         s.log.info("%d files were removed\n" % cnt)
 
 
+    def timelapseCb(s, task):
+        for cam in s.cameras():
+            cam.imageRecorder.timelapseCb()
+
+
     def rmEmptyDirs(s, dir, preserve=False):
         ld = os.listdir(dir)
         if not len(ld) and not preserve:
@@ -153,8 +167,9 @@ class Dvr():
 
     def stopperCb(s, task):
         for cam in s.cameras():
-            if cam.isStarted():
-                cam.checkForRestart()
+            if not cam.isStarted():
+                continue
+            cam.checkForRestart()
 
 
     def stat(s):
@@ -166,6 +181,7 @@ class Dvr():
     def destroy(s):
         s.stop()
         s.httpServer.destroy()
+        s.sp.destroy()
 
 
     def __repr__(s):
@@ -176,6 +192,7 @@ class Dvr():
                                       'recording' if c.isRecording() else 'not_recording')
         list(map(camInfo, s.cameras()))
         return text
+
 
 
     class HttpHandlers():
@@ -189,6 +206,7 @@ class Dvr():
             s.httpServer.setReqHandler("GET", "/dvr/start", s.startHandler, ('cname',))
             s.httpServer.setReqHandler("GET", "/dvr/stop", s.stopHandler, ('cname',))
             s.httpServer.setReqHandler("GET", "/dvr/stat", s.statHandler)
+            s.httpServer.setReqHandler("GET", "/dvr/create_jpeg_frames", s.createJpegFramesHandler)
 
 
         def startHandler(s, args, conn):
@@ -225,3 +243,25 @@ class Dvr():
                 s.log.err("openRtspHandler: call unregistred camera: %s" % e)
                 raise HttpHandlerError(str(e))
             cam.openRtspHandler(args, conn)
+
+
+        def createJpegFramesHandler(s, args, conn):
+            camList = []
+            cnt = 0
+            for cam in s.dvr.cameras():
+                cnt += 1
+                if not cam.isStarted():
+                    continue
+                try:
+                    fname = cam.captureJpegFrame()
+                except AppError:
+                    continue
+                url = "%s%s/%s/%s" % (
+                       s.dvr.conf.dvr['globalHttp'],
+                       s.dvr.conf.dvr['storage']['jpegFramesWww'],
+                       cam.name(), os.path.basename(fname))
+                camList.append({'index': cnt,
+                                'img_url': url})
+            return {"cameras": camList}
+
+

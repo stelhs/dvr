@@ -40,3 +40,4 @@ Installing DVR
 
 6) install packages:
     apt install python3-psutil
+    pip3 install inotify

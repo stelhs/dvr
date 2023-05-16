@@ -12,15 +12,15 @@ class DatabaseConnectorConnectError(DatabaseConnectorError):
     pass
 
 
-# openRTSP errors
-
-class OpenRtspError(AppError):
-    pass
+# Camera errors
 
 class CameraNotRegistredError(AppError):
     pass
 
 class CameraRecDurationError(AppError):
+    pass
+
+class OpenRtspError(AppError):
     pass
 
 class OpenRtspAlreadyStarted(OpenRtspError):
@@ -32,3 +32,14 @@ class OpenRtspAlreadyStopped(OpenRtspError):
 class OpenRtspCanNotStopError(OpenRtspError):
     pass
 
+class ImageRecordingError(AppError):
+    pass
+
+class ImageRecordingAlreadyStartedError(ImageRecordingError):
+    pass
+
+class ImageRecordingAlreadyStoppedError(ImageRecordingError):
+    pass
+
+class ImageRecordingNoImageError(ImageRecordingError):
+    pass
