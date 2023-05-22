@@ -7,6 +7,6 @@ class ConfDvr(ConfParser):
         s.addConfig('dvr', 'dvr.conf')
         s.addConfig('telegram', 'telegram.conf')
         s.addConfig('db', 'database.conf')
-        s.addConfig('cameras', 'cameras.conf')
+        s.addConfig('camcorders', 'camcorders.conf')
 
 

@@ -12,34 +12,32 @@ class DatabaseConnectorConnectError(DatabaseConnectorError):
     pass
 
 
-# Camera errors
+# Camcorder errors
 
-class CameraNotRegistredError(AppError):
+class CamNotRegistredErr(AppError):
     pass
 
-class CameraRecDurationError(AppError):
+class CamVideoErr(AppError):
     pass
 
-class OpenRtspError(AppError):
+class CamFrameRecorderErr(AppError):
     pass
 
-class OpenRtspAlreadyStarted(OpenRtspError):
+class CamFramerNoDataErr(CamFrameRecorderErr):
     pass
 
-class OpenRtspAlreadyStopped(OpenRtspError):
+
+# FrameStorage errors
+
+class FrameStorageErr(AppError):
     pass
 
-class OpenRtspCanNotStopError(OpenRtspError):
+
+# Timelapce errors
+
+
+class TimelapseErr(AppError):
     pass
 
-class ImageRecordingError(AppError):
-    pass
-
-class ImageRecordingAlreadyStartedError(ImageRecordingError):
-    pass
-
-class ImageRecordingAlreadyStoppedError(ImageRecordingError):
-    pass
-
-class ImageRecordingNoImageError(ImageRecordingError):
+class TimelapseCreatorErr(TimelapseErr):
     pass

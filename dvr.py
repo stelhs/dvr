@@ -21,7 +21,7 @@ atexit.register(exitCb)
 
 
 print("help:")
-print("\tdvr.camera('south')")
+print("\tdvr.camcorder('south')")
 print("\tdvr.start()")
 
 dvr.start()
