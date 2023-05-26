@@ -14,6 +14,7 @@ class FrameStorage():
         s.varStorage = cam.varStorage
         s.cron = cam.cron
         s.dvrConf = cam.dvrConf
+        s._enabled = False
         s.log = Syslog("FrameStorage_%s" % s.name())
         s.frameStoreLock = threading.Lock()
 
@@ -22,7 +23,6 @@ class FrameStorage():
 
         s.fsDir = '%s/%s_frames/%s' % (s.dvrConf['timelapse']['dir'],
                                        intervalName, cam.name())
-        pathlib.Path(s.fsDir).mkdir(parents=True, exist_ok=True)
 
         try:
             s.cw = s.cron.worker('FrameStorage_%s' % intervalName)
@@ -40,8 +40,35 @@ class FrameStorage():
         return "%s_%s" % (s.cam.name(), s.intervalName)
 
 
+    def enable(s):
+        s._enabled = True
+
+
+    def disable(s):
+        s._enabled = False
+
+
+    def dirExists(s):
+        return os.path.exists(s.fsDir)
+
+
+    def createDir(s):
+        if s.dirExists():
+            return
+
+        pathlib.Path(s.fsDir).mkdir(parents=True, exist_ok=True)
+        with open("%s/created" % s.fsDir, "w") as f:
+            f.write(str(now()))
+
+
     def frameStoreCronCb(s, cronWorker=None):
+        if not s._enabled:
+            return
+
         def do(fName, created):
+            if not s.dirExists():
+                s.createDir()
+
             newFName = "%s/%06d.jpg" % (s.fsDir, s.frameCnt.val)
             try:
                 shutil.copyfile(fName, newFName)
@@ -69,6 +96,9 @@ class FrameStorage():
                 raise FrameStorageErr(s.log, 'No frame files')
 
             try:
+                with open("%s/export" % s.fsDir, "w") as f:
+                    f.write(str(now()))
+
                 pathlib.Path(newDir).mkdir(parents=True, exist_ok=True)
                 shutil.move(s.fsDir, newDir)
                 s.counters.inc('exportDirs')
@@ -77,7 +107,7 @@ class FrameStorage():
                                                  "to directory: %s" % (
                                                  s.fsDir, newDir, e)) from e
             try:
-                pathlib.Path(s.fsDir).mkdir(parents=True, exist_ok=True)
+                s.createDir()
             except OSError as e:
                 raise FrameStorageErr(s.log, "Can`t create directory %s: %s" % (
                                                   s.fsDir, e)) from e

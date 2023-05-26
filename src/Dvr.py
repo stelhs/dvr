@@ -65,36 +65,29 @@ class Dvr():
     def start(s):
         for cam in s.camcorders():
             try:
-                if not cam.vr.isStarted() and 'RECORDING' in cam.options():
-                    print("Start recording %s" % cam.name())
-                    cam.vr.start()
+                print("Start camcorder %s" % cam.name())
+                cam.start()
             except AppError as e:
                 print("Can't start recording %s: %s" % (cam.name(), e))
-
-            try:
-                if not cam.fr.isStarted() and 'TIMELAPSE' in cam.options():
-                    print("Start framing %s" % cam.name())
-                    cam.fr.start()
-            except AppError as e:
-                print("Can't start framing %s: %s" % (cam.name(), e))
             Task.sleep(3000)
 
 
     def stop(s):
         for cam in s.camcorders():
             try:
-                if cam.vr.isStarted():
-                    print("Stop recording %s" % cam.name())
-                    cam.vr.stop()
+                print("Stop camcorder %s" % cam.name())
+                cam.stop()
             except AppError as e:
                 print("%s stop recording error: %s" % (cam.name(), e))
 
-            try:
-                if cam.fr.isStarted():
-                    print("Stop framing %s" % cam.name())
-                    cam.fr.stop()
-            except AppError as e:
-                print("%s stop framing error: %s" % (cam.name(), e))
+
+    def finishTimelapses(s):
+        def do():
+            print("Start timelapce creation")
+            for cam in s.camcorders():
+                cam.finishTimelapsesSync()
+            print("Finished timelapce creation")
+        s.finishTimelapsesTask = Task.asyncRun('finishTimelapses', do)
 
 
     def totalVideoDuration(s):
@@ -174,8 +167,8 @@ class Dvr():
 
 
     def stat(s):
-        return {'vrTotalSize': s.size(),
-                'vrTotalDuration': s.archiveDuration(),
+        return {'vrTotalSize': s.totalVideoSize(),
+                'vrTotalDuration': s.totalVideoDuration(),
                 'camcorders': [c.stat() for c in s.camcorders()]}
 
 

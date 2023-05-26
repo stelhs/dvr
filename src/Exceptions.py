@@ -41,3 +41,9 @@ class TimelapseErr(AppError):
 
 class TimelapseCreatorErr(TimelapseErr):
     pass
+
+class TimelapseFramesErr(TimelapseErr):
+    pass
+
+class TimelapseFFmpegErr(TimelapseCreatorErr):
+    pass

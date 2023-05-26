@@ -6,10 +6,9 @@ from MySQL import *
 
 
 class DatabaseConnector():
-    def __init__(s, skynet, conf):
-        s.skynet = skynet
+    def __init__(s, dvr, conf):
+        s.dvr = dvr
         s.conf = conf
-        s.tc = skynet.tc
         s.log = Syslog('DatabaseConnector')
         s.mysql = MySQL(conf)
         s.attempts = 0
@@ -19,10 +18,7 @@ class DatabaseConnector():
 
 
     def toAdmin(s, msg):
-        if not s.tc:
-            s.tc = s.skynet
-        if s.tc:
-            s.tc.toAdmin("DatabaseConnector: %s" % msg)
+        s.dvr.toAdmin("DatabaseConnector: %s" % msg)
 
 
     def reconnector(s):
@@ -36,7 +32,7 @@ class DatabaseConnector():
 
             try:
                 s.mysql.connect()
-            except mysql.connector.errors.DatabaseError:
+            except mysql.connector.errors.Error:
                 s.attempts += 1
                 Task.sleep(1000)
                 continue
@@ -47,6 +43,7 @@ class DatabaseConnector():
 
 
     def waitForReconnect(s):
+        print("waitForReconnect")
         s.task.sendMessage('doConnect')
         while 1:
             Task.sleep(500)
@@ -64,7 +61,7 @@ class DatabaseConnector():
                     return s.mysql.query(query)
             except mysql.connector.errors.ProgrammingError as e:
                 raise DatabaseConnectorError(s.log, "query() '%s' error: %s" % (query, e)) from e
-            except mysql.connector.errors.Error as e:
+            except mysql.connector.errors.OperationalError as e:
                 s.log.info('Cant request query(): SQL query: "%s". Error: %s' % (query, e))
                 s.waitForReconnect()
 
@@ -79,7 +76,7 @@ class DatabaseConnector():
                     return s.mysql.queryList(query)
             except mysql.connector.errors.ProgrammingError as e:
                 raise DatabaseConnectorError(s.log, "queryList() '%s' error: %s" % (query, e)) from e
-            except mysql.connector.errors.Error as e:
+            except mysql.connector.errors.OperationalError as e:
                 s.log.info('Cant request queryList(): SQL query: "%s". Error: %s' % (query, e))
                 s.waitForReconnect()
 
@@ -97,7 +94,7 @@ class DatabaseConnector():
                         "insert() in table %s error: %s. " \
                         "dataWithComma: %s, dataWithOutComma: %s" % (
                             tableName, e, dataWithComma, dataWithOutComma)) from e
-            except mysql.connector.errors.Error as e:
+            except mysql.connector.errors.OperationalError as e:
                 s.log.info('Cant insert to table "%s": Error: %s' % (tableName, e))
                 s.waitForReconnect()
 
@@ -113,7 +110,7 @@ class DatabaseConnector():
             except mysql.connector.errors.ProgrammingError as e:
                 raise DatabaseConnectorError(s.log,
                         "update() table %s, id:%d error: %s" % (tableName, id, e)) from e
-            except mysql.connector.errors.Error as e:
+            except mysql.connector.errors.OperationalError as e:
                 s.log.info('Cant update table "%s": SQL query: "%s". Error: %s' % (tableName, query, e))
                 s.waitForReconnect()
 

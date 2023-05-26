@@ -133,7 +133,7 @@ class VideoRecorder():
             s.restartAsync()
             raise HttpHandlerError("file %s null size" % videoFile)
 
-        ffmpegCmd = 'ffmpeg -i %s ' % videoFile
+        ffmpegCmd = 'nice -n 15 ffmpeg -nostdin -i %s ' % videoFile
         aCopy = ''
         if audioFile:
             if s.cam.audioCodec == 'PCMA':
@@ -190,7 +190,7 @@ class VideoRecorder():
                             {'created': 'FROM_UNIXTIME(%s)' % startTime})
             s._lastUpdate = now()
             s.counters.inc('successFiles')
-        except DatabaseConnectorError as e:
+        except (DatabaseConnectorError, OSError) as e:
             err = "Can't insert into Database: %s" % e
             s.toAdmin(err)
             try:

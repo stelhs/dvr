@@ -28,7 +28,7 @@ class FrameRecorder():
 
         s.tmpDir = '%s/%s' % (s.dvrConf['frameRecorder']['tmpDir'], s.cam.name())
         s.proc = s.sp.register("FrameRecorder_%s" % s.cam.name(), s.ffmpegArgs,
-                                autoRestart=True, onStoppedCb=s.killCb)
+                                autoRestart=True, onStoppedCb=s.killCb, nice=10)
 
         s.cleanTmp()
         s.inotify = inotify.adapters.Inotify()
@@ -51,13 +51,13 @@ class FrameRecorder():
                 '-rtsp_transport', 'tcp',
                 '-use_wallclock_as_timestamps', '1',
                 '-i', s.cam.rtsp(),
-                '-vf', (('drawtext=fontfile=%s:' % s.dvrConf['frameRecorder']['fontFile']) +
+                '-vf', (('fps=%s,' % s.dvrConf['frameRecorder']['frequency']) +
+                        ('drawtext=fontfile=%s:' % s.dvrConf['frameRecorder']['fontFile']) +
                                 ('fontsize=36:' \
                                  'fontcolor=yellow:' \
                                  'box=1:' \
                                  'boxcolor=black@0.4:' \
-                                 "text='%%{pts\:localtime\:%s}'," % now()) +
-                                ('fps=%s' % s.dvrConf['frameRecorder']['frequency'])),
+                                 "text='%%{pts\:localtime\:%s}'" % now())),
                 '-qscale:v', '2',
                 '%s/img_%%04d.jpg' % s.tmpDir]
 

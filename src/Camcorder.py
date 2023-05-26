@@ -34,6 +34,8 @@ class Camcorder():
         s.fsMonth = FrameStorage(s, 'month', ('0 */2 7-21 * * *',))
         s.fsYear = FrameStorage(s, 'year', ('0 */15 9-15 * * *',))
 
+        s.fsAll = (s.fsDay, s.fsWeek, s.fsMonth, s.fsYear)
+
         s.fsDay.mkTimelapseByCron(s.cron.worker('Timelapse_day'))
         s.fsWeek.mkTimelapseByCron(s.cron.worker('Timelapse_week'))
         s.fsMonth.mkTimelapseByCron(s.cron.worker('Timelapse_month'))
@@ -63,22 +65,45 @@ class Camcorder():
 
 
     def start(s):
-        s.vr.start()
         s.fr.start()
+        if 'RECORDING' in s.options():
+            s.vr.start()
+
+        if 'TIMELAPSE' in s.options():
+            for fs in s.fsAll:
+                fs.enable()
 
 
     def stop(s):
-        s.vr.stop()
-        s.fr.stop()
+        if s.vr.isStarted():
+            s.vr.stop()
+        if s.fr.isStarted():
+            s.fr.stop()
+
+        for fs in s.fsAll:
+            fs.disable()
+
+
+    def finishTimelapsesSync(s):
+        for fs in s.fsAll:
+            try:
+                if not fs.tlps.isIncomplete():
+                    continue
+                print('Found not completed timelapse. ' \
+                      'Start creator %s' % fs.tlps.name())
+                fs.tlps.createSync()
+                print('Finished timelapse %s' % fs.tlps.name())
+            except AppError as e:
+                print('Can`t finished timelapse %s: %s' % (fs.tlps.name(), e))
 
 
     def stat(s):
         return {'name': s.name(),
                 'desc': s.description(),
-                'isRecordStarted': s.isStarted(),
-                'isRecording': s.isRecording(),
-                'dataSize': s.size(),
-                'duration': s.duration()}
+                'isRecordStarted': s.vr.isStarted(),
+                'isRecording': s.vr.isRecording(),
+                'vrDataSize': s.vr.size(),
+                'vrDuration': s.vr.duration()}
 
 
     def resetStat(s):
