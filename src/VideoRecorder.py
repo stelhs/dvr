@@ -45,6 +45,9 @@ class VideoRecorder():
         s.cw.addCb(s.checkForRestart)
 
 
+    def toAdmin(s, msg):
+        s.dvr.toAdmin("VideoRecorder_%s: %s" % (s.cam.name(), msg))
+
 
     def openRtspArgs(s):
         return ['/usr/local/bin/openRTSP',

@@ -83,10 +83,8 @@ class Dvr():
 
     def finishTimelapses(s):
         def do():
-            print("Start timelapce creation")
             for cam in s.camcorders():
                 cam.finishTimelapsesSync()
-            print("Finished timelapce creation")
         s.finishTimelapsesTask = Task.asyncRun('finishTimelapses', do)
 
 
